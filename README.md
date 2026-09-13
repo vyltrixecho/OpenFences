@@ -5,8 +5,31 @@ Porzadkuje pulpit w polprzezroczyste kontenery ("fence'y") z wlasna siatka ikon.
 
 C# + WPF, .NET 10. Bez zewnetrznych zaleznosci.
 
-**[Pobierz instalator](https://github.com/vyltrixecho/OpenFences/releases/latest)** - instalacja
-dla biezacego uzytkownika, bez uprawnien administratora. Wymaga .NET Desktop Runtime 10.
+## Instalacja
+
+Jedna komenda w terminalu Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/vyltrixecho/OpenFences/main/install.ps1 | iex
+```
+
+Skrypt pyta GitHuba o najnowsze wydanie, pobiera instalator, **sprawdza jego sume kontrolna
+SHA-256** i uruchamia instalacje. Bez uprawnien administratora - OpenFences instaluje sie
+w katalogu uzytkownika (`%LOCALAPPDATA%\Programs\OpenFences`).
+
+Bez okien kreatora (potok nie przekazuje argumentow, wiec przez blok skryptu):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/vyltrixecho/OpenFences/main/install.ps1))) -Silent
+```
+
+Skrypt przyjmuje tez `-DownloadOnly` (tylko pobiera i weryfikuje) oraz `-Version v0.4.0`
+(konkretne wydanie zamiast najnowszego).
+
+Wolisz kliknac - **[pobierz instalator recznie](https://github.com/vyltrixecho/OpenFences/releases/latest)**.
+
+Do uruchomienia potrzebny jest [.NET Desktop Runtime 10](https://dotnet.microsoft.com/download/dotnet/10.0);
+skrypt sprawdza jego obecnosc i mowi, czym go doinstalowac.
 
 ## Jak to wyglada
 
