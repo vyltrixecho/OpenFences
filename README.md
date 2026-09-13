@@ -5,6 +5,9 @@ Porzadkuje pulpit w polprzezroczyste kontenery ("fence'y") z wlasna siatka ikon.
 
 C# + WPF, .NET 10. Bez zewnetrznych zaleznosci.
 
+**[Pobierz instalator](https://github.com/vyltrixecho/OpenFences/releases/latest)** - instalacja
+dla biezacego uzytkownika, bez uprawnien administratora. Wymaga .NET Desktop Runtime 10.
+
 ## Jak to wyglada
 
 Fence z zawartoscia - polprzezroczysty kontener z wlasna siatka ikon:
