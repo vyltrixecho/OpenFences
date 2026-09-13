@@ -364,58 +364,6 @@ Dwie pulapki, gdyby ktos dokladal kontrolki do tego okna:
   rysuje `SelectionBoxItemTemplate`, a ten bierze sie z `ItemTemplate`. Listy w tym
   oknie maja wiec jawny `ItemTemplate`.
 
-## Instalator
-
-```powershell
-.\build-installer.ps1
-```
-
-Skrypt publikuje aplikacje, odczytuje wersje z gotowego `.exe` i sklada instalator
-w `dist\OpenFences-<wersja>-setup.exe`. Wymaga
-[Inno Setup](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`).
-
-Instalator:
-
-- instaluje **dla biezacego uzytkownika** do `%LOCALAPPDATA%\Programs\OpenFences`,
-  bez pytania o uprawnienia administratora
-- zaklada skroty w menu Start (`OpenFences` oraz `OpenFences - ustawienia`),
-  opcjonalnie na pulpicie
-- opcjonalnie wpisuje aplikacje do autostartu
-- przy deinstalacji sprzata wpisy menu pulpitu i autostartu, a o usuniecie
-  ustawien z `%APPDATA%\OpenFences` pyta osobno
-
-Instalacja bez okien (np. do skryptu):
-
-```powershell
-.\dist\OpenFences-0.2.0.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-```
-
-### Dlaczego nie Program Files
-
-Wbudowany aktualizator podmienia wlasny plik `.exe` w miejscu. W `Program Files`
-wymagaloby to uprawnien administratora przy kazdej aktualizacji, wiec instalacja
-per-uzytkownik nie jest tu wygoda, tylko warunkiem dzialania auto-aktualizacji.
-
-## Budowanie i uruchamianie
-
-```bash
-dotnet run --project src/OpenFences/OpenFences.csproj
-```
-
-Wersja do codziennego uzytku - jeden plik .exe:
-
-```bash
-dotnet publish src/OpenFences/OpenFences.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
-```
-
-Wynik lezy w `src/OpenFences/bin/Release/net10.0-windows/win-x64/publish/OpenFences.exe`.
-
-Wersja niezalezna od zainstalowanego runtime (wieksza, ale dziala wszedzie):
-
-```bash
-dotnet publish src/OpenFences/OpenFences.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
-```
-
 ## Obsluga
 
 Aplikacja nie ma glownego okna - siedzi w zasobniku systemowym.
