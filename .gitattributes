@@ -1,0 +1,17 @@
+# Koncowki linii normalizujemy przy zapisie do repozytorium, a w katalogu roboczym
+# zostaja windowsowe. Bez tego kazde narzedzie zapisujace plik po swojemu robilo by
+# zmiane w calym pliku.
+* text=auto
+
+*.cs      text diff=csharp
+*.xaml    text
+*.csproj  text
+*.resx    text
+*.md      text
+*.iss     text
+
+# PowerShell w Windows lubi CRLF takze w repozytorium.
+*.ps1     text eol=crlf
+
+*.png     binary
+*.ico     binary
