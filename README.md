@@ -72,6 +72,10 @@ Menu fence'a i okno ustawien:
 - **Dwuklik w pusty pulpit** chowa i pokazuje wszystkie fence'y naraz. Dziala tylko na golym
   pulpicie - dwuklik w ikone albo w sam fence nic nie zmienia. Do wylaczenia w Ustawieniach
   -> Zachowanie
+- **Uklad osobno dla kazdego zestawu monitorow** - po przepieciu laptopa na inny ekran
+  (wiekszy albo mniejszy) i z powrotem fence'y wracaja dokladnie tam, gdzie je zostawiles.
+  Na ekranie widzianym pierwszy raz pozycje przeliczaja sie proporcjonalnie
+  (patrz "Kilka monitorow")
 - **Uklad przezywa awarie**: kazdy zapis zostawia poprzednia wersje jako `layout.json.bak`,
   a nieczytelnego pliku glownego nie zastepuje uklad domyslny, tylko ta kopia
 
@@ -100,6 +104,11 @@ Menu fence'a i okno ustawien:
   wlasny serwer, cokolwiek
 - Parametr `--update` robi caly przebieg bez okien (pod harmonogram zadan),
   a wynik ladzie w `%APPDATA%\OpenFences\update.log`
+
+**Zasobnik systemowy**
+- Ikone w zasobniku mozna schowac (Ustawienia -> Zachowanie -> "Pokazuj ikone w zasobniku
+  systemowym"). Do ustawien prowadzi wtedy ponowne uruchomienie OpenFences (np. z menu Start)
+  albo "Konfiguruj OpenFences" w menu pulpitu
 
 **Jezyk**
 - Polski i angielski, domyslnie za jezykiem Windows (Ustawienia -> Wyglad -> Jezyk)
@@ -199,9 +208,10 @@ strone jest wtedy jedna wlasciwoscia zamiast przekladania wierszy, kolumn i rozp
 Dwie rzeczy, ktore trzeba bylo przy tym rozwiazac:
 
 - **Kotwica przy zwijaniu.** Okno WPF zmienia rozmiar od lewego gornego rogu, wiec fence
-  z belka na dole albo po prawej uciekalby razem z krawedzia. Na czas zwijania okno pilnuje
-  krawedzi, przy ktorej stoi belka (`PinRollAnchor`), i zdejmuje kotwice dopiero po ostatnim
-  ukladzie - inaczej wchodzilaby w droge zmianie rozmiaru.
+  z belka na dole albo po prawej uciekalby razem z krawedzia. Dlatego razem z rozmiarem
+  animowane jest tez polozenie (`Left` rownolegle do `Width`, `Top` do `Height`), w tej samej
+  klatce. Wczesniejsza wersja poprawiala polozenie dopiero w `SizeChanged` - spozniala sie
+  o klatke za animacja i fence "szarpal". To samo dotyczy chowania do prawej i dolnej krawedzi.
 - **Obrocona nazwa.** Tytul dostaje `LayoutTransform` o 270 stopni, ale margines i przycinanie
   licza sie dalej w ukladzie rodzica, wiec dlugosc tekstu trzeba ograniczac wysokoscia belki
   (`UpdateVerticalTitleLength`). Bez tego dluga nazwa wyjezdzalaby poza fence.
@@ -228,6 +238,33 @@ jako `layout.json.broken-<data>` razem z opisem bledu. Trzy rzeczy, ktore latwo 
 
 Zapis jest dlawiony (700 ms), a poza tym leci przy wyjsciu i na koniec sesji Windows,
 wiec twarde ubicie procesu kosztuje najwyzej ostatnie 700 ms zmian.
+
+## Kilka monitorow
+
+Kiedys fence mial jedno polozenie na wszystkie ekrany. Po przepieciu na inny monitor Windows
+sam przestawial okna, a najblizszy zapis utrwalal te przestawione pozycje - uklad uzytkownika
+przepadal.
+
+Teraz kazdy fence trzyma polozenie osobno dla kazdego **zestawu monitorow**
+(`FenceModel.Placements`). Zestaw rozpoznaje podpis z granic wszystkich ekranow i znacznika
+glownego (`DisplayService.Signature`) - obszar roboczy celowo nie wchodzi do podpisu, bo
+przesuniecie paska zadan to nie inny zestaw monitorow.
+
+- **Znany zestaw** - fence wraca dokladnie tam, gdzie go zostawiono, razem z rozmiarem.
+- **Nowy zestaw** - jesli tamten monitor wciaz jest podpiety, polozenie zostaje bez zmian.
+  Inaczej fence trafia na monitor glowny, a pozycja skaluje sie z wolnym miejscem na ekranie:
+  fence przy prawej krawedzi zostaje przy prawej, na srodku - na srodku. Fence wiekszy od
+  nowego ekranu jest zmniejszany. Takie wyliczone polozenie jest oznaczone jako automatyczne
+  i przy nastepnej wizycie liczy sie od nowa - dopoki uzytkownik go nie poprawi.
+- **Czas przejscia** - podpiecie stacji dokujacej to seria zdarzen, a Windows przestawia okna
+  jeszcze chwile po nich. Przez ten czas (1 s od ostatniej zmiany) pozycje okien nie sa
+  zapisywane, a uklad odtwarza sie dopiero po uspokojeniu.
+- **Start przy innym ekranie** - `layout.json` pamieta zestaw z ostatniego zapisu, wiec uklad
+  przelicza sie tez wtedy, gdy aplikacja wystartuje przy innych monitorach niz sie zamknela.
+
+Polozenie okna i monitora jest w pikselach fizycznych, a okno stawiane przez `SetWindowPos`.
+`Left`/`Top` okna WPF przeliczaja sie przez DPI monitora, na ktorym okno stoi teraz, a nie tego,
+na ktory ma trafic - przy ekranach o roznym skalowaniu dawalo to przesuniecia.
 
 ## Jedna ikona, nie dwie
 
@@ -392,7 +429,8 @@ Dwie pulapki, gdyby ktos dokladal kontrolki do tego okna:
 
 ## Obsluga
 
-Aplikacja nie ma glownego okna - siedzi w zasobniku systemowym.
+Aplikacja nie ma glownego okna - siedzi w zasobniku systemowym (ikone mozna schowac
+w ustawieniach).
 
 | Gdzie | Akcja |
 |---|---|
@@ -413,7 +451,8 @@ Parametry wiersza polecen (uzywane tez przez menu pulpitu):
 | `--update` | Sprawdza i instaluje aktualizacje bez zadnych okien |
 
 Gdy aplikacja juz dziala, polecenie jest przekazywane do niej nazwanym potokiem
-(`OpenFences.Commands.v1`), a druga instancja konczy sie po cichu.
+(`OpenFences.Commands.v1`), a druga instancja konczy sie po cichu. Uruchomienie bez parametrow
+dziala jak `--settings` - przy schowanej ikonie w zasobniku to najprostsza droga do ustawien.
 
 ### Windows 11 a menu kontekstowe
 
@@ -445,7 +484,8 @@ To ustawienie calego Eksploratora, a nie samego OpenFences - dlatego aplikacja g
 
 Zwykly JSON - mozna go edytowac recznie albo skopiowac na inny komputer.
 Uszkodzony plik jest odkladany jako `layout.json.broken-<data>`, a aplikacja startuje
-z ukladem domyslnym zamiast sie wywalic.
+z kopii `layout.json.bak` (patrz "Uklad, kopia zapasowa i awarie"). Uklad domyslny
+dostaje dopiero wtedy, gdy nie da sie odczytac zadnego z tych plikow.
 
 ## Jak to dziala w srodku
 
@@ -515,6 +555,7 @@ src/OpenFences/
   Interop/NativeMethods.cs   cala warstwa P/Invoke
   Services/
     ConfigService.cs         odczyt i zapis layout.json
+    DisplayService.cs        monitory, podpis zestawu ekranow, przenoszenie polozenia
     SystemThemeService.cs    motyw aplikacji Windows + ciemna belka tytulu
     DesktopService.cs        okna pulpitu, z-order, ukrywanie ikon
     IconService.cs           ikony z powloki + cache
