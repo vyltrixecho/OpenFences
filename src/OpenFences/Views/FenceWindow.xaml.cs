@@ -54,16 +54,6 @@ public partial class FenceWindow : Window
     /// </summary>
     private bool _dockAnchorsReady;
 
-    /// <summary>
-    /// Krawedz, ktora ma stac w miejscu przez czas zwijania. Okno WPF rosnie i maleje
-    /// od lewego gornego rogu, wiec fence z belka na dole albo po prawej uciekalby razem
-    /// z krawedzia - a to wlasnie belka ma zostac tam, gdzie uzytkownik ja widzi.
-    /// Flaga gasnie po ostatnim ukladzie, zeby nie wchodzic w droge zmianie rozmiaru.
-    /// </summary>
-    private bool _rollAnchorActive;
-    private double _rollAnchorRight;
-    private double _rollAnchorBottom;
-
     /// <summary>Rozmiar ikon, dla ktorego ostatnio wyciagnelismy bitmapy z powloki.</summary>
     private int _appliedIconSize = -1;
 
@@ -370,12 +360,21 @@ public partial class FenceWindow : Window
             Height = fullHeight;
             Top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - fullHeight));
 
+            var targetWidth = shown ? fullWidth : peek;
+
             if (Model.Dock == EdgeDock.Left)
             {
                 Left = area.Left;
             }
+            else
+            {
+                // Prawa krawedz ma stac w miejscu - Left animujemy rownolegle do Width, w tej
+                // samej klatce. Odczytywanie ActualWidth reaktywnie z OnSizeChangedForDock
+                // (jak bylo wczesniej) spoznialo sie o klatke za animacja i szuflada "szarpala".
+                AnimateProperty(LeftProperty, _dockAnchorRight - targetWidth, animate);
+            }
 
-            AnimateProperty(WidthProperty, shown ? fullWidth : peek, animate);
+            AnimateProperty(WidthProperty, targetWidth, animate);
         }
         else
         {
@@ -386,12 +385,19 @@ public partial class FenceWindow : Window
             Width = fullWidth;
             Left = Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - fullWidth));
 
+            var targetHeight = shown ? fullHeight : peek;
+
             if (Model.Dock == EdgeDock.Top)
             {
                 Top = area.Top;
             }
+            else
+            {
+                // To samo co wyzej dla dolnej krawedzi: Top rownolegle do Height.
+                AnimateProperty(TopProperty, _dockAnchorBottom - targetHeight, animate);
+            }
 
-            AnimateProperty(HeightProperty, shown ? fullHeight : peek, animate);
+            AnimateProperty(HeightProperty, targetHeight, animate);
         }
     }
 
@@ -414,39 +420,7 @@ public partial class FenceWindow : Window
                     break;
             }
         }
-
-        if (_rollAnchorActive && Model.Dock == EdgeDock.None)
-        {
-            switch (EffectiveHeaderSide)
-            {
-                case HeaderSide.Bottom:
-                    Top = _rollAnchorBottom - ActualHeight;
-                    break;
-
-                case HeaderSide.Right:
-                    Left = _rollAnchorRight - ActualWidth;
-                    break;
-            }
-        }
     }
-
-    /// <summary>Zapamietuje krawedz, ktora ma przetrwac zwijanie w tym samym miejscu.</summary>
-    private void PinRollAnchor()
-    {
-        _rollAnchorActive = EffectiveHeaderSide is HeaderSide.Bottom or HeaderSide.Right;
-
-        if (!_rollAnchorActive)
-        {
-            return;
-        }
-
-        _rollAnchorBottom = Top + ActualHeight;
-        _rollAnchorRight = Left + ActualWidth;
-    }
-
-    /// <summary>Zdejmuje kotwice dopiero po ukladzie, inaczej ostatnia klatka zwijania by jej nie zlapala.</summary>
-    private void ReleaseRollAnchorAfterLayout() =>
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _rollAnchorActive = false);
 
     private void AnimateProperty(
         DependencyProperty property, double target, bool animate, Action? completed = null)
@@ -1072,6 +1046,7 @@ public partial class FenceWindow : Window
             UpdateEmptyHint();
             RefreshIcons();
             _manager.RequestSave();
+            ScrollNewItemsIntoView();
         }
 
         if (deferred.Count > 0)
@@ -1084,6 +1059,15 @@ public partial class FenceWindow : Window
 
         return added;
     }
+
+    /// <summary>
+    /// Nowa pozycja laduje na koncu listy, wiec przy pelnym fence'ie chowa sie pod dolna
+    /// krawedzia - ScrollViewer ja ma, tylko bez wskazowki, ze trzeba przewinac. Czekamy
+    /// na uklad WrapPanela po dodaniu (DispatcherPriority.Loaded), dopiero potem przewijamy,
+    /// inaczej ScrollableHeight jeszcze nie uwzglednia nowej pozycji.
+    /// </summary>
+    private void ScrollNewItemsIntoView() =>
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => ContentScroll.ScrollToBottom());
 
     /// <summary>
     /// Dokancza przenosiny, na ktore zwykle konto nie ma prawa - skroty z pulpitu wszystkich
@@ -1562,21 +1546,31 @@ public partial class FenceWindow : Window
         else if (vertical)
         {
             // Belka z boku: fence zwija sie w poziomie, do szerokosci samej belki.
-            PinRollAnchor();
-            AnimateProperty(
-                WidthProperty,
-                rolled ? CollapsedWidth() : Math.Max(Model.RestoreWidth, MinFenceWidth),
-                animate,
-                ReleaseRollAnchorAfterLayout);
+            var targetWidth = rolled ? CollapsedWidth() : Math.Max(Model.RestoreWidth, MinFenceWidth);
+
+            if (EffectiveHeaderSide == HeaderSide.Right)
+            {
+                // Belka po prawej ma stac w miejscu - Left animujemy rownolegle do Width,
+                // w tej samej klatce. Odczytywanie Width reaktywnie z SizeChanged (jak bylo
+                // wczesniej) spoznialo sie o klatke za wlasciwa animacja i fence "szarpal".
+                var anchorRight = Left + ActualWidth;
+                AnimateProperty(LeftProperty, anchorRight - targetWidth, animate);
+            }
+
+            AnimateProperty(WidthProperty, targetWidth, animate);
         }
         else
         {
-            PinRollAnchor();
-            AnimateProperty(
-                HeightProperty,
-                rolled ? CollapsedHeight() : Math.Max(Model.RestoreHeight, MinFenceHeight),
-                animate,
-                ReleaseRollAnchorAfterLayout);
+            var targetHeight = rolled ? CollapsedHeight() : Math.Max(Model.RestoreHeight, MinFenceHeight);
+
+            if (EffectiveHeaderSide == HeaderSide.Bottom)
+            {
+                // To samo co wyzej dla belki na dole: Top rownolegle do Height.
+                var anchorBottom = Top + ActualHeight;
+                AnimateProperty(TopProperty, anchorBottom - targetHeight, animate);
+            }
+
+            AnimateProperty(HeightProperty, targetHeight, animate);
         }
 
         UpdateHeaderCorners();
@@ -1718,6 +1712,104 @@ public partial class FenceWindow : Window
             Model.Width = Width;
             Model.RestoreWidth = Width;
         }
+    }
+
+    // ---- zmiana monitorow --------------------------------------------------
+
+    /// <summary>Biezace polozenie fence'a w pikselach fizycznych, razem z monitorem, na ktorym stoi.</summary>
+    public FencePlacement? CapturePlacement()
+    {
+        if (_hwnd == IntPtr.Zero || !NativeMethods.GetWindowRect(_hwnd, out var rect))
+        {
+            return null;
+        }
+
+        var handle = NativeMethods.MonitorFromWindow(_hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
+
+        if (DisplayService.Describe(handle) is not { } monitor)
+        {
+            return null;
+        }
+
+        return new FencePlacement
+        {
+            Left = rect.Left,
+            Top = rect.Top,
+            PixelWidth = rect.Right - rect.Left,
+            PixelHeight = rect.Bottom - rect.Top,
+            MonitorLeft = monitor.Bounds.Left,
+            MonitorTop = monitor.Bounds.Top,
+            MonitorWidth = monitor.Bounds.Right - monitor.Bounds.Left,
+            MonitorHeight = monitor.Bounds.Bottom - monitor.Bounds.Top,
+            AreaLeft = monitor.Work.Left,
+            AreaTop = monitor.Work.Top,
+            AreaWidth = monitor.WorkWidth,
+            AreaHeight = monitor.WorkHeight,
+            Dpi = monitor.Dpi,
+            Width = Model.Width,
+            Height = Model.Height,
+            RestoreWidth = Model.RestoreWidth,
+            RestoreHeight = Model.RestoreHeight,
+        };
+    }
+
+    /// <summary>
+    /// Stawia fence w zapamietanym polozeniu. Pozycje ustawiamy przez SetWindowPos
+    /// w pikselach fizycznych - Left/Top okna WPF przelicza sie przez DPI monitora,
+    /// na ktorym okno stoi teraz, a nie tego, na ktory ma trafic.
+    /// Po ukladzie trzeba jeszcze wywolac <see cref="SettleAfterDisplayChange"/>.
+    /// </summary>
+    public void ApplyPlacement(FencePlacement placement)
+    {
+        Model.Width = placement.Width;
+        Model.Height = placement.Height;
+        Model.RestoreWidth = placement.RestoreWidth;
+        Model.RestoreHeight = placement.RestoreHeight;
+
+        // Niedokonczona animacja zwijania/szuflady nadpisalaby to, co tu ustawimy.
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
+        BeginAnimation(WidthProperty, null);
+        BeginAnimation(HeightProperty, null);
+
+        // Przyklejonemu fence'owi rozmiar ustawia szuflada - patrz SettleAfterDisplayChange.
+        if (Model.Dock == EdgeDock.None)
+        {
+            Width = Model.RolledUp && IsHeaderVertical
+                ? CollapsedWidth()
+                : Math.Max(Model.Width, MinFenceWidth);
+
+            Height = Model.RolledUp && !IsHeaderVertical
+                ? CollapsedHeight()
+                : Math.Max(Model.Height, MinFenceHeight);
+        }
+
+        if (_hwnd != IntPtr.Zero)
+        {
+            NativeMethods.SetWindowPos(
+                _hwnd, IntPtr.Zero, placement.Left, placement.Top, 0, 0,
+                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        }
+    }
+
+    /// <summary>
+    /// Dopina fence do obszaru roboczego monitora, na ktorym stoi po zmianie ukladu ekranow:
+    /// przyklejony wraca do krawedzi, zwykly nie moze wystawac poza ekran.
+    /// </summary>
+    public void SettleAfterDisplayChange()
+    {
+        if (Model.Dock != EdgeDock.None)
+        {
+            SetPeek(_isPeeking, animate: false);
+        }
+        else
+        {
+            var area = WorkingAreaDip();
+            Left = Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - ActualWidth));
+            Top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - ActualHeight));
+        }
+
+        SyncBoundsToModel();
     }
 
     // ---- interakcja z pozycjami -------------------------------------------

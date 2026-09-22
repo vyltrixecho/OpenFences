@@ -125,6 +125,14 @@ public sealed class FenceModel
     public List<SortRule> Rules { get; set; } = new();
 
     /// <summary>
+    /// Polozenie fence'a osobno dla kazdego ukladu monitorow (klucz: podpis z
+    /// <see cref="OpenFences.Services.DisplayService.Signature"/>). Jedno X/Y na wszystkie
+    /// uklady nie wystarczalo: po podpieciu innego monitora Windows sam przestawial okna,
+    /// a najblizszy zapis nadpisywal nimi uklad uzytkownika.
+    /// </summary>
+    public Dictionary<string, FencePlacement> Placements { get; set; } = new();
+
+    /// <summary>
     /// Czytniki ekranu odczytuja pozycje list po ToString() elementu, a nie po tym,
     /// co widac w szablonie - bez tego lista fence'ow w ustawieniach byla ogloszana
     /// jako "OpenFences.Models.FenceModel".
@@ -250,6 +258,12 @@ public sealed class AppSettings
 
     public bool RunAtStartup { get; set; }
 
+    /// <summary>
+    /// Czy pokazywac ikone w zasobniku systemowym. Bez niej do ustawien prowadzi menu pulpitu
+    /// albo ponowne uruchomienie OpenFences - druga instancja otwiera wtedy okno ustawien.
+    /// </summary>
+    public bool ShowTrayIcon { get; set; } = true;
+
     /// <summary>Czy dodac wpisy OpenFences do menu kontekstowego pulpitu.</summary>
     public bool DesktopMenuIntegration { get; set; } = true;
 
@@ -304,9 +318,51 @@ public sealed class FenceTheme
     }
 }
 
+/// <summary>
+/// Zapamietane polozenie fence'a w jednym ukladzie monitorow. Pozycja okna i monitora
+/// sa w pikselach fizycznych - przy kilku monitorach o roznym DPI tylko one sa jednoznaczne.
+/// Rozmiary fence'a zostaja w jednostkach WPF, tak jak w <see cref="FenceModel"/>.
+/// </summary>
+public sealed class FencePlacement
+{
+    public int Left { get; set; }
+    public int Top { get; set; }
+    public int PixelWidth { get; set; }
+    public int PixelHeight { get; set; }
+
+    /// <summary>Granice monitora, na ktorym stal fence - po nich rozpoznajemy ten sam ekran.</summary>
+    public int MonitorLeft { get; set; }
+    public int MonitorTop { get; set; }
+    public int MonitorWidth { get; set; }
+    public int MonitorHeight { get; set; }
+
+    /// <summary>Obszar roboczy tego monitora (bez paska zadan).</summary>
+    public int AreaLeft { get; set; }
+    public int AreaTop { get; set; }
+    public int AreaWidth { get; set; }
+    public int AreaHeight { get; set; }
+
+    public uint Dpi { get; set; } = 96;
+
+    public double Width { get; set; }
+    public double Height { get; set; }
+    public double RestoreWidth { get; set; }
+    public double RestoreHeight { get; set; }
+
+    /// <summary>
+    /// Polozenie wyliczone przez nas po zmianie monitorow, a nie ulozone przez uzytkownika.
+    /// Takie przy nastepnej wizycie w tym ukladzie liczymy od nowa, z najswiezszego ukladu.
+    /// </summary>
+    public bool Auto { get; set; }
+}
+
 public sealed class LayoutFile
 {
     public int Version { get; set; } = 1;
+
+    /// <summary>Uklad monitorow z ostatniego zapisu - pozwala wykryc zmiane miedzy uruchomieniami.</summary>
+    public string? DisplaySignature { get; set; }
+
     public AppSettings Settings { get; set; } = new();
     public List<FenceModel> Fences { get; set; } = new();
 }

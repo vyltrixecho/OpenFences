@@ -100,7 +100,9 @@ public partial class App : Application
         if (!isFirst)
         {
             // Wywolanie z menu pulpitu: przekazujemy polecenie dzialajacej instancji i znikamy.
-            if (command is not null && IpcService.TrySend(command))
+            // Zwykle ponowne uruchomienie otwiera ustawienia - przy schowanej ikonie zasobnika
+            // to jedyna droga do nich, jesli menu pulpitu jest wylaczone.
+            if (IpcService.TrySend(command ?? IpcService.CommandSettings))
             {
                 Shutdown();
                 return;
@@ -403,7 +405,7 @@ public partial class App : Application
         {
             Icon = _trayIcon,
             Text = "OpenFences",
-            Visible = true,
+            Visible = _manager.Settings.ShowTrayIcon,
         };
 
         _tray.DoubleClick += (_, _) => _manager.ShowSettings();
@@ -413,6 +415,7 @@ public partial class App : Application
         // Napisy menu rozwiazuja sie raz, przy skladaniu. Okno ustawien po zmianie jezyka
         // powstaje od nowa, menu fence'ow tez - ale to jedno zostawalo w starym jezyku.
         _manager.StateChanged += RefreshTrayMenuLanguage;
+        _manager.StateChanged += () => _tray.Visible = _manager.Settings.ShowTrayIcon;
     }
 
     private void RefreshTrayMenuLanguage()

@@ -137,6 +137,8 @@
   <data name="Settings_LockFences"><value>Zablokuj pozycje i rozmiar fence'ow</value></data>
   <data name="Settings_AutoSort"><value>Automatycznie wciagaj nowe pliki z pulpitu wedlug regul</value></data>
   <data name="Settings_RunAtStartup"><value>Uruchamiaj razem z Windows</value></data>
+  <data name="Settings_ShowTrayIcon"><value>Pokazuj ikone w zasobniku systemowym</value></data>
+  <data name="Settings_ShowTrayIconHint"><value>Bez ikony ustawienia otworzysz, uruchamiajac OpenFences ponownie (np. z menu Start) albo z menu pulpitu - "Konfiguruj OpenFences".</value></data>
   <data name="Settings_DesktopMenu"><value>Dodaj OpenFences do menu pulpitu (prawy przycisk myszy)</value></data>
   <data name="Settings_DesktopMenuHint"><value>Dodaje pozycje "Nowy fence tutaj" i "Konfiguruj OpenFences". W Windows 11 klasyczne wpisy trafiaja do "Pokaz wiecej opcji" (albo Shift+F10) - nowe, skrocone menu przyjmuje tylko aplikacje pakietowane.</value></data>
   <data name="Settings_MoveIntoFence"><value>Pozycja wciagnieta do fence'a znika z pulpitu</value></data>

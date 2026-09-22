@@ -17,12 +17,19 @@ public sealed class FenceManager
     private readonly List<FileSystemWatcher> _desktopWatchers = new();
     private readonly DispatcherTimer _saveDebounce;
     private readonly DispatcherTimer _maintenance;
+    private readonly DispatcherTimer _displayDebounce;
 
     private readonly DesktopClickService _desktopClicks;
 
     private SettingsWindow? _settingsWindow;
     private int _maintenanceTicks;
     private bool _desktopIconsWereVisibleAtStart;
+
+    /// <summary>
+    /// Uklad monitorow wlasnie sie zmienia. Windows przestawia wtedy okna po swojemu -
+    /// do czasu odtworzenia ukladu nie wolno tych pozycji zapisac, bo nadpisalyby uklad uzytkownika.
+    /// </summary>
+    private bool _displayChangePending;
 
     /// <summary>Nieudany zapis zglaszamy raz, a nie przy kazdej probie - patrz <see cref="SaveNow"/>.</summary>
     private bool _saveErrorReported;
@@ -49,6 +56,19 @@ public sealed class FenceManager
             Interval = TimeSpan.FromMilliseconds(1200),
         };
         _maintenance.Tick += OnMaintenanceTick;
+
+        // Podpiecie stacji dokujacej czy monitora to seria zdarzen w krotkim odstepie,
+        // a Windows przestawia okna jeszcze chwile po nich. Ukladamy fence'y po uspokojeniu.
+        _displayDebounce = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(1000),
+        };
+        _displayDebounce.Tick += (_, _) =>
+        {
+            _displayDebounce.Stop();
+            _displayChangePending = false;
+            RestoreLayoutForDisplays();
+        };
 
         Storage = new ItemStorageService(config.ConfigDirectory);
 
@@ -105,12 +125,19 @@ public sealed class FenceManager
         }
 
         _maintenance.Start();
+
+        // Aplikacja mogla wystartowac przy innym ukladzie monitorow niz ten z ostatniego zapisu.
+        // ContextIdle: po odtworzeniu zwiniecia i szuflad, ktore okna robia przy Loaded.
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle, RestoreLayoutForDisplays);
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
     }
 
     public void Shutdown()
     {
         _maintenance.Stop();
         _saveDebounce.Stop();
+        _displayDebounce.Stop();
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _desktopClicks.Dispose();
         Icons.Dispose();
 
@@ -334,10 +361,15 @@ public sealed class FenceManager
 
     public void SaveNow()
     {
-        foreach (var window in _windows.Values)
+        if (!_displayChangePending)
         {
-            // Rozmiar/pozycja moga zmienic sie bez naszego udzialu (np. zmiana DPI).
-            window.SyncBoundsToModel();
+            foreach (var window in _windows.Values)
+            {
+                // Rozmiar/pozycja moga zmienic sie bez naszego udzialu (np. zmiana DPI).
+                window.SyncBoundsToModel();
+            }
+
+            CapturePlacements(autoIds: null);
         }
 
         try
@@ -361,6 +393,121 @@ public sealed class FenceManager
                 "OpenFences",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+        }
+    }
+
+    // ---- zmiana monitorow --------------------------------------------------
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
+        Dispatcher.CurrentDispatcher.BeginInvoke(() =>
+        {
+            _displayChangePending = true;
+            _displayDebounce.Stop();
+            _displayDebounce.Start();
+        });
+
+    /// <summary>
+    /// Uklada fence'y dla biezacego ukladu monitorow. Uklad juz znany wraca dokladnie tak,
+    /// jak go uzytkownik zostawil. Nowy dostaje polozenie przeniesione z poprzedniego ukladu
+    /// (patrz <see cref="DisplayService.Map"/>).
+    /// </summary>
+    private void RestoreLayoutForDisplays()
+    {
+        var monitors = DisplayService.GetMonitors();
+
+        if (monitors.Count == 0)
+        {
+            return;
+        }
+
+        var signature = DisplayService.Signature(monitors);
+        var previous = Layout.DisplaySignature;
+        Layout.DisplaySignature = signature;
+
+        // Plik z wersji bez zapamietywania ukladow - biezace polozenie staje sie punktem wyjscia.
+        if (previous is null)
+        {
+            CapturePlacements(autoIds: null);
+            RequestSave();
+            return;
+        }
+
+        var autoIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var window in _windows.Values)
+        {
+            var placements = window.Model.Placements;
+            placements.TryGetValue(signature, out var saved);
+            placements.TryGetValue(previous, out var before);
+
+            FencePlacement? target;
+
+            if (saved is not null && (!saved.Auto || before is null || previous == signature))
+            {
+                target = saved;
+
+                if (saved.Auto)
+                {
+                    autoIds.Add(window.Model.Id);
+                }
+            }
+            else if (before is not null)
+            {
+                target = DisplayService.Map(before, monitors);
+                autoIds.Add(window.Model.Id);
+            }
+            else
+            {
+                // Nie ma skad wziac polozenia - wystarczy, zeby fence byl widoczny.
+                target = null;
+            }
+
+            if (target is not null)
+            {
+                window.ApplyPlacement(target);
+            }
+        }
+
+        // Po przeniesieniu okno lapie DPI nowego monitora i przelicza uklad - dopiero wtedy
+        // obszar roboczy i rozmiar sa te wlasciwe.
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            foreach (var window in _windows.Values)
+            {
+                window.SettleAfterDisplayChange();
+            }
+
+            CapturePlacements(autoIds);
+            RequestSave();
+        });
+    }
+
+    /// <summary>
+    /// Zapamietuje polozenie kazdego fence'a pod biezacym ukladem monitorow. Polozenie
+    /// wyliczone przez nas zostaje oznaczone jako automatyczne, dopoki uzytkownik go nie zmieni.
+    /// </summary>
+    private void CapturePlacements(ISet<string>? autoIds)
+    {
+        if (Layout.DisplaySignature is not { } signature)
+        {
+            return;
+        }
+
+        foreach (var window in _windows.Values)
+        {
+            if (window.CapturePlacement() is not { } placement)
+            {
+                continue;
+            }
+
+            var placements = window.Model.Placements;
+
+            placement.Auto = autoIds?.Contains(window.Model.Id)
+                             ?? (placements.TryGetValue(signature, out var old)
+                                 && old.Auto
+                                 && DisplayService.SamePosition(old, placement));
+
+            placements[signature] = placement;
         }
     }
 

@@ -221,6 +221,12 @@
                                   Content="{v:Loc Settings_RunAtStartup}"
                                   Checked="StartupCheck_Changed" Unchecked="StartupCheck_Changed" />
 
+                        <CheckBox x:Name="TrayIconCheck" Margin="0,6,0,0"
+                                  Content="{v:Loc Settings_ShowTrayIcon}"
+                                  Checked="Toggle_Changed" Unchecked="Toggle_Changed" />
+                        <TextBlock Text="{v:Loc Settings_ShowTrayIconHint}"
+                                   TextWrapping="Wrap" Opacity="0.65" Margin="24,2,0,0" FontSize="11" />
+
                         <CheckBox x:Name="DesktopMenuCheck" Margin="0,6,0,0"
                                   Content="{v:Loc Settings_DesktopMenu}"
                                   Checked="DesktopMenuCheck_Changed" Unchecked="DesktopMenuCheck_Changed" />

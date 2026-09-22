@@ -132,6 +132,8 @@
   <data name="Settings_LockFences" xml:space="preserve"><value>Lock fence position and size</value></data>
   <data name="Settings_AutoSort" xml:space="preserve"><value>Automatically pull new desktop files in by rules</value></data>
   <data name="Settings_RunAtStartup" xml:space="preserve"><value>Start with Windows</value></data>
+  <data name="Settings_ShowTrayIcon" xml:space="preserve"><value>Show icon in the system tray</value></data>
+  <data name="Settings_ShowTrayIconHint" xml:space="preserve"><value>Without the icon, open settings by launching OpenFences again (e.g. from the Start menu) or from the desktop menu - &quot;Configure OpenFences&quot;.</value></data>
   <data name="Settings_DesktopMenu" xml:space="preserve"><value>Add OpenFences to the desktop right-click menu</value></data>
   <data name="Settings_DesktopMenuHint" xml:space="preserve"><value>Adds &quot;New fence here&quot; and &quot;Configure OpenFences&quot;. On Windows 11 classic entries land under &quot;Show more options&quot; (or Shift+F10) - the new, short menu only accepts packaged apps.</value></data>
   <data name="Settings_MoveIntoFence" xml:space="preserve"><value>An item pulled into a fence disappears from the desktop</value></data>

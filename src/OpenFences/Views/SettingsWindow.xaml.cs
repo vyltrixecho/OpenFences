@@ -115,6 +115,7 @@ public partial class SettingsWindow : Window
         AutoSortCheck.IsChecked = Settings.AutoSortEnabled;
         DesktopDoubleClickCheck.IsChecked = Settings.DesktopDoubleClickHidesFences;
         MoveIntoFenceCheck.IsChecked = Settings.MoveItemsIntoFence;
+        TrayIconCheck.IsChecked = Settings.ShowTrayIcon;
         StartupCheck.IsChecked = StartupService.IsEnabled();
         DesktopMenuCheck.IsChecked = ShellMenuService.IsInstalled();
 
@@ -417,6 +418,7 @@ public partial class SettingsWindow : Window
         Settings.AutoSortEnabled = AutoSortCheck.IsChecked == true;
         Settings.DesktopDoubleClickHidesFences = DesktopDoubleClickCheck.IsChecked == true;
         Settings.MoveItemsIntoFence = MoveIntoFenceCheck.IsChecked == true;
+        Settings.ShowTrayIcon = TrayIconCheck.IsChecked == true;
         Commit();
     }
 
