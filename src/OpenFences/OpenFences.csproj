@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>OpenFences</AssemblyName>
     <RootNamespace>OpenFences</RootNamespace>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\OpenFences.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
