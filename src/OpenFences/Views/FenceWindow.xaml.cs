@@ -265,14 +265,6 @@ public partial class FenceWindow : Window
     }
 
     /// <summary>
-    /// Wysuwa (shown) albo chowa przyklejony fence do paska przy krawedzi.
-    /// <para>
-    /// Chowanie zwija rozmiar okna, a nie wypycha go poza ekran. Wypychanie wygladalo dobrze
-    /// na jednym monitorze, ale przy kilku ekranach fence wjezdzal na sasiedni monitor
-    /// (i przy okazji lapal jego skalowanie DPI). Zwijanie trzyma okno na jednym ekranie.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// Ile fence'a zostaje widoczne po schowaniu do krawedzi.
     /// <para>
     /// Przy wlaczonej opcji zostaje cala belka z tytulem - ale tylko wtedy, gdy stoi po tej
@@ -303,6 +295,19 @@ public partial class FenceWindow : Window
         return IsHeaderVertical ? CollapsedWidth() : CollapsedHeight();
     }
 
+    /// <summary>
+    /// Wysuwa (shown) albo chowa przyklejony fence do paska przy krawedzi.
+    /// <para>
+    /// Okno nie zmienia przy tym ani rozmiaru, ani polozenia: stoi przy krawedzi w pelnym
+    /// rozmiarze rozwinietego fence'a, a chowanie skraca tylko RootBorder w jego wnetrzu - patrz
+    /// <see cref="AnimateRootSize"/>. Reszta okna jest calkiem przezroczysta, wiec klikniecia
+    /// i przeciaganie przechodza przez nia na pulpit jak przez puste miejsce.
+    /// </para>
+    /// <para>
+    /// Wypychanie okna poza ekran odpadlo wczesniej: przy kilku monitorach fence wjezdzal na
+    /// sasiedni ekran (i lapal jego skalowanie DPI). Okno stojace przy krawedzi zostaje na swoim.
+    /// </para>
+    /// </summary>
     private void SetPeek(bool shown, bool animate)
     {
         if (Model.Dock == EdgeDock.None)
@@ -352,58 +357,86 @@ public partial class FenceWindow : Window
 
         if (horizontal)
         {
-            // Wzdluz krawedzi wysokosc jest stala, wiec ustawiamy ja od razu.
             ContentRoot.Width = fullWidth - RootBorder.BorderThickness.Left - RootBorder.BorderThickness.Right;
             ContentRoot.Height = double.NaN;
-
-            BeginAnimation(HeightProperty, null);
-            Height = fullHeight;
-            Top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - fullHeight));
-
-            var targetWidth = shown ? fullWidth : peek;
-
-            if (Model.Dock == EdgeDock.Left)
-            {
-                Left = area.Left;
-            }
-            else
-            {
-                // Prawa krawedz ma stac w miejscu - Left animujemy rownolegle do Width, w tej
-                // samej klatce. Odczytywanie ActualWidth reaktywnie z OnSizeChangedForDock
-                // (jak bylo wczesniej) spoznialo sie o klatke za animacja i szuflada "szarpala".
-                AnimateProperty(LeftProperty, _dockAnchorRight - targetWidth, animate);
-            }
-
-            AnimateProperty(WidthProperty, targetWidth, animate);
         }
         else
         {
             ContentRoot.Height = fullHeight - RootBorder.BorderThickness.Top - RootBorder.BorderThickness.Bottom;
             ContentRoot.Width = double.NaN;
-
-            BeginAnimation(WidthProperty, null);
-            Width = fullWidth;
-            Left = Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - fullWidth));
-
-            var targetHeight = shown ? fullHeight : peek;
-
-            if (Model.Dock == EdgeDock.Top)
-            {
-                Top = area.Top;
-            }
-            else
-            {
-                // To samo co wyzej dla dolnej krawedzi: Top rownolegle do Height.
-                AnimateProperty(TopProperty, _dockAnchorBottom - targetHeight, animate);
-            }
-
-            AnimateProperty(HeightProperty, targetHeight, animate);
         }
+
+        // W glab ekranu okno ma rozmiar rozwinietego fence'a, nawet gdy fence jest zwiniety:
+        // zwiniecie przy prawej/dolnej krawedzi przesuwaloby inaczej okno, a z nim cala szuflade.
+        var windowWidth = horizontal ? Math.Max(Model.Width, MinFenceWidth) : fullWidth;
+        var windowHeight = horizontal ? fullHeight : Math.Max(Model.Height, MinFenceHeight);
+
+        var left = Model.Dock switch
+        {
+            EdgeDock.Left => area.Left,
+            EdgeDock.Right => area.Right - windowWidth,
+            _ => Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - windowWidth)),
+        };
+
+        var top = Model.Dock switch
+        {
+            EdgeDock.Top => area.Top,
+            EdgeDock.Bottom => area.Bottom - windowHeight,
+            _ => Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - windowHeight)),
+        };
+
+        SetBoundsAtOnce(left, top, windowWidth, windowHeight);
+
+        // RootBorder przylega do krawedzi ekranu, a w poprzek niej wypelnia okno.
+        RootBorder.HorizontalAlignment = Model.Dock switch
+        {
+            EdgeDock.Left => HorizontalAlignment.Left,
+            EdgeDock.Right => HorizontalAlignment.Right,
+            _ => HorizontalAlignment.Stretch,
+        };
+
+        RootBorder.VerticalAlignment = Model.Dock switch
+        {
+            EdgeDock.Top => VerticalAlignment.Top,
+            EdgeDock.Bottom => VerticalAlignment.Bottom,
+            _ => VerticalAlignment.Stretch,
+        };
+
+        var along = horizontal ? WidthProperty : HeightProperty;
+        var across = horizontal ? HeightProperty : WidthProperty;
+        RootBorder.BeginAnimation(across, null);
+        RootBorder.SetValue(across, double.NaN);
+
+        var windowSize = horizontal ? windowWidth : windowHeight;
+        var target = shown ? (horizontal ? fullWidth : fullHeight) : peek;
+
+        // Podpowiedz pustego fence'a stoi na srodku okna. Przy wysuwaniu pokazujemy ja dopiero
+        // na koncu - inaczej wisialaby nad szuflada, ktora jeszcze nie dojechala.
+        if (shown && animate)
+        {
+            EmptyHint.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            UpdateEmptyHint();
+        }
+
+        AnimateRootSize(along, CurrentRootSize(along, windowSize), target, animate, () =>
+        {
+            // Wysuniety, rozwiniety fence zajmuje cale okno i wtedy RootBorder idzie za oknem -
+            // przy zmianie rozmiaru uchwytami sztywny rozmiar zostawalby w tyle.
+            if (shown && Math.Abs(target - windowSize) < 0.5)
+            {
+                RootBorder.SetValue(along, double.NaN);
+            }
+
+            UpdateEmptyHint();
+        });
     }
 
     /// <summary>
-    /// Fence przy prawej/dolnej krawedzi musi przesuwac sie w miare zwijania,
-    /// zeby jego krawedz zostawala przyklejona do brzegu ekranu.
+    /// Fence przy prawej/dolnej krawedzi musi przesuwac sie przy kazdej zmianie rozmiaru okna
+    /// (np. uchwytami), zeby jego krawedz zostawala przyklejona do brzegu ekranu.
     /// </summary>
     private void OnSizeChangedForDock(object sender, SizeChangedEventArgs e)
     {
@@ -422,18 +455,44 @@ public partial class FenceWindow : Window
         }
     }
 
-    private void AnimateProperty(
-        DependencyProperty property, double target, bool animate, Action? completed = null)
+    // ---- animacja w oknie, ktore stoi w miejscu -----------------------------
+
+    /// <summary>Numer biezacej animacji RootBorder - zakonczenie starszej nie moze juz niczego ruszac.</summary>
+    private int _rootAnimation;
+
+    /// <summary>
+    /// Zmienia rozmiar RootBorder wzdluz jednej osi, a okno zostawia w spokoju.
+    /// <para>
+    /// Wczesniej animowane bylo samo okno i przy prawej/dolnej krawedzi (szuflada, belka na dole)
+    /// krawedz, ktora miala stac, skakala. Przezroczyste okno WPF rysuje osobny watek i po kazdym
+    /// przesunieciu okna przez klatke widac w nowym miejscu jeszcze stara zawartosc - a przy tych
+    /// krawedziach z rozmiarem musi jechac tez pozycja. Zmierzone: szuflada przy dolnej krawedzi
+    /// odrywala sie przy wysuwaniu o kilkadziesiat pikseli, a przy chowaniu wchodzila pod pasek
+    /// zadan. Kazda zmiana rozmiaru okna czeka tez na watek renderujacy, wiec przy wielu ikonach
+    /// animacja gubila klatki.
+    /// </para>
+    /// <para>Tu okno stoi, a klatka animacji to tylko inne przyciecie zawartosci.</para>
+    /// </summary>
+    private void AnimateRootSize(
+        DependencyProperty property, double from, double target, bool animate, Action? completed = null)
     {
-        if (!animate)
+        var version = ++_rootAnimation;
+
+        // Wartosc koncowa od razu jako wlasna: animacja ja przykrywa, a gdy sie skonczy, nie ma
+        // czego doganiac.
+        RootBorder.BeginAnimation(property, null);
+        RootBorder.SetValue(property, target);
+
+        if (!animate || Math.Abs(from - target) < 0.5)
         {
-            BeginAnimation(property, null);
-            SetValue(property, target);
+            ContentRoot.CacheMode = null;
             completed?.Invoke();
             return;
         }
 
-        var animation = new DoubleAnimation(target, TimeSpan.FromMilliseconds(180))
+        CacheContentDuringAnimation();
+
+        var animation = new DoubleAnimation(from, target, TimeSpan.FromMilliseconds(180))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
             FillBehavior = FillBehavior.Stop,
@@ -441,12 +500,84 @@ public partial class FenceWindow : Window
 
         animation.Completed += (_, _) =>
         {
-            BeginAnimation(property, null);
-            SetValue(property, target);
+            if (version != _rootAnimation)
+            {
+                return;
+            }
+
+            ContentRoot.CacheMode = null;
             completed?.Invoke();
         };
 
-        BeginAnimation(property, animation);
+        RootBorder.BeginAnimation(property, animation);
+    }
+
+    /// <summary>Biezacy rozmiar RootBorder wzdluz osi - takze w polowie animacji.</summary>
+    private double CurrentRootSize(DependencyProperty property, double whenStretched)
+    {
+        var value = (double)RootBorder.GetValue(property);
+        return double.IsNaN(value) ? whenStretched : value;
+    }
+
+    /// <summary>RootBorder znow wypelnia cale okno: bez szuflady i bez trwajacej animacji zwijania.</summary>
+    private void ResetRootBorder()
+    {
+        _rootAnimation++;
+
+        RootBorder.BeginAnimation(WidthProperty, null);
+        RootBorder.BeginAnimation(HeightProperty, null);
+        RootBorder.Width = double.NaN;
+        RootBorder.Height = double.NaN;
+        RootBorder.HorizontalAlignment = HorizontalAlignment.Stretch;
+        RootBorder.VerticalAlignment = VerticalAlignment.Stretch;
+        ContentRoot.CacheMode = null;
+    }
+
+    /// <summary>
+    /// Na czas animacji rysuje zawartosc fence'a raz do bitmapy, zamiast od nowa w kazdej klatce.
+    /// <para>
+    /// Kazdy podpis ma wlasny DropShadowEffect (osobny przebieg renderowania), a kazda ikona
+    /// skaluje sie z 256 px. Przy wielu ikonach przerysowywanie wszystkiego co klatke
+    /// potrafilo nie nadazac za animacja.
+    /// </para>
+    /// <para>
+    /// Tylko przy krawedzi: tam ContentRoot ma sztywny rozmiar pelnego fence'a, wiec bitmapa
+    /// zostaje wazna przez cala animacje - zmienia sie tylko przyciecie. Przy zwyklym zwijaniu
+    /// zawartosc zmienia rozmiar co klatke i cache tylko dokladalby pracy.
+    /// </para>
+    /// </summary>
+    private void CacheContentDuringAnimation()
+    {
+        if (Model.Dock == EdgeDock.None)
+        {
+            return;
+        }
+
+        // Cache nie uwzglednia skalowania DPI przodkow - bez RenderAtScale tekst bylby rozmyty.
+        var scale = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+
+        ContentRoot.CacheMode = new BitmapCache
+        {
+            RenderAtScale = scale,
+            SnapsToDevicePixels = true,
+            EnableClearType = false,
+        };
+    }
+
+    /// <summary>Polozenie i rozmiar okna w DIP wprost z Win32 - wlasciwosci WPF bywaja o krok do tylu.</summary>
+    private Rect CurrentBoundsDip()
+    {
+        if (_hwnd != IntPtr.Zero && NativeMethods.GetWindowRect(_hwnd, out var rect))
+        {
+            var fromDevice = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice
+                             ?? Matrix.Identity;
+
+            return new Rect(
+                fromDevice.Transform(new Point(rect.Left, rect.Top)),
+                fromDevice.Transform(new Point(rect.Right, rect.Bottom)));
+        }
+
+        return new Rect(Left, Top, ActualWidth, ActualHeight);
     }
 
     /// <summary>
@@ -554,11 +685,17 @@ public partial class FenceWindow : Window
             _dockAnchorsReady = false;
             _autoHideDelay.Stop();
 
-            // Zdejmujemy sztywny rozmiar zawartosci i wracamy do pelnych wymiarow fence'a.
+            // Zdejmujemy szuflade i sztywny rozmiar zawartosci i wracamy do pelnych wymiarow
+            // fence'a. Wyrownanie tez: zostawione od krawedzi (do dolu/prawej) sciskaloby
+            // DockPanel do rozmiaru zawartosci i belka ladowala w srodku fence'a.
+            ResetRootBorder();
             BeginAnimation(WidthProperty, null);
             BeginAnimation(HeightProperty, null);
             ContentRoot.Width = double.NaN;
             ContentRoot.Height = double.NaN;
+            ContentRoot.HorizontalAlignment = HorizontalAlignment.Stretch;
+            ContentRoot.VerticalAlignment = VerticalAlignment.Stretch;
+            UpdateEmptyHint();
 
             Width = Model.RolledUp && IsHeaderVertical
                 ? CollapsedWidth()
@@ -1002,8 +1139,14 @@ public partial class FenceWindow : Window
         }
     }
 
+    /// <summary>
+    /// Podpowiedz stoi na srodku okna. Przyklejony fence ma okno pelnego rozmiaru takze wtedy,
+    /// gdy jest schowany - podpowiedz wisialaby wtedy w powietrzu nad paskiem przy krawedzi.
+    /// </summary>
     private void UpdateEmptyHint() =>
-        EmptyHint.Visibility = Vm.Items.Count == 0 && !Model.RolledUp ? Visibility.Visible : Visibility.Collapsed;
+        EmptyHint.Visibility = Vm.Items.Count == 0 && !Model.RolledUp && (Model.Dock == EdgeDock.None || _isPeeking)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     /// <summary>Dodaje sciezki do fence'a, pomijajac duplikaty. Zwraca liczbe faktycznie dodanych.</summary>
     public int AddPaths(IEnumerable<string> paths)
@@ -1517,8 +1660,6 @@ public partial class FenceWindow : Window
 
     public void SetRollUp(bool rolled, bool animate, bool persist)
     {
-        var vertical = IsHeaderVertical;
-
         if (rolled)
         {
             if (!Model.RolledUp)
@@ -1540,37 +1681,12 @@ public partial class FenceWindow : Window
 
         if (Model.Dock != EdgeDock.None)
         {
-            // Przy krawedzi wysokoscia steruje szuflada - inaczej obie animacje bilyby sie o Height.
+            // Przy krawedzi rozmiarem steruje szuflada - inaczej obie animacje bilyby sie o RootBorder.
             SetPeek(_isPeeking, animate);
-        }
-        else if (vertical)
-        {
-            // Belka z boku: fence zwija sie w poziomie, do szerokosci samej belki.
-            var targetWidth = rolled ? CollapsedWidth() : Math.Max(Model.RestoreWidth, MinFenceWidth);
-
-            if (EffectiveHeaderSide == HeaderSide.Right)
-            {
-                // Belka po prawej ma stac w miejscu - Left animujemy rownolegle do Width,
-                // w tej samej klatce. Odczytywanie Width reaktywnie z SizeChanged (jak bylo
-                // wczesniej) spoznialo sie o klatke za wlasciwa animacja i fence "szarpal".
-                var anchorRight = Left + ActualWidth;
-                AnimateProperty(LeftProperty, anchorRight - targetWidth, animate);
-            }
-
-            AnimateProperty(WidthProperty, targetWidth, animate);
         }
         else
         {
-            var targetHeight = rolled ? CollapsedHeight() : Math.Max(Model.RestoreHeight, MinFenceHeight);
-
-            if (EffectiveHeaderSide == HeaderSide.Bottom)
-            {
-                // To samo co wyzej dla belki na dole: Top rownolegle do Height.
-                var anchorBottom = Top + ActualHeight;
-                AnimateProperty(TopProperty, anchorBottom - targetHeight, animate);
-            }
-
-            AnimateProperty(HeightProperty, targetHeight, animate);
+            AnimateRollUp(rolled, animate);
         }
 
         UpdateHeaderCorners();
@@ -1578,6 +1694,87 @@ public partial class FenceWindow : Window
         if (persist)
         {
             _manager.RequestSave();
+        }
+    }
+
+    /// <summary>
+    /// Zwija fence do samej belki albo go rozwija. Belka stoi w miejscu, a fence skraca sie
+    /// albo wydluza od przeciwnej strony.
+    /// <para>
+    /// Przez cala animacje okno ma rozmiar pelnego fence'a, a skraca sie RootBorder - patrz
+    /// <see cref="AnimateRootSize"/>. Samo okno zmienia rozmiar tylko raz: przy rozwijaniu na
+    /// poczatku, przy zwijaniu na koncu. Wczesniej belka na dole przy rozwijaniu podskakiwala
+    /// o kilkadziesiat pikseli, a po kazdym zwinieciu fence zjezdzal o piksel nizej, bo dolna
+    /// krawedz liczyla sie za kazdym razem od nowa z zaokraglonych Top i ActualHeight.
+    /// </para>
+    /// </summary>
+    private void AnimateRollUp(bool rolled, bool animate)
+    {
+        var vertical = IsHeaderVertical;
+        var along = vertical ? WidthProperty : HeightProperty;
+
+        // Belka po prawej albo na dole: w miejscu stoi dalsza krawedz okna.
+        var farEdge = EffectiveHeaderSide is HeaderSide.Right or HeaderSide.Bottom;
+
+        var collapsed = vertical ? CollapsedWidth() : CollapsedHeight();
+        var target = rolled
+            ? collapsed
+            : vertical
+                ? Math.Max(Model.RestoreWidth, MinFenceWidth)
+                : Math.Max(Model.RestoreHeight, MinFenceHeight);
+
+        var bounds = CurrentBoundsDip();
+        var windowSize = vertical ? bounds.Width : bounds.Height;
+
+        RootBorder.HorizontalAlignment = !vertical
+            ? HorizontalAlignment.Stretch
+            : farEdge ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+
+        RootBorder.VerticalAlignment = vertical
+            ? VerticalAlignment.Stretch
+            : farEdge ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+
+        // Zanim okno urosnie, RootBorder musi trzymac to, co widac teraz - inaczej w pierwszej
+        // klatce po powiekszeniu okna mignalby caly fence.
+        var from = CurrentRootSize(along, windowSize);
+        RootBorder.BeginAnimation(along, null);
+        RootBorder.SetValue(along, from);
+
+        if (windowSize < target - 0.5)
+        {
+            ResizeAlongHeader(vertical, farEdge, target);
+        }
+
+        // Podpowiedz pustego fence'a stoi na srodku okna, ktore juz ma pelny rozmiar -
+        // pokazujemy ja dopiero, gdy fence dojedzie.
+        if (!rolled && animate)
+        {
+            EmptyHint.Visibility = Visibility.Collapsed;
+        }
+
+        AnimateRootSize(along, from, target, animate, () =>
+        {
+            ResizeAlongHeader(vertical, farEdge, target);
+
+            RootBorder.SetValue(along, double.NaN);
+            RootBorder.HorizontalAlignment = HorizontalAlignment.Stretch;
+            RootBorder.VerticalAlignment = VerticalAlignment.Stretch;
+            UpdateEmptyHint();
+        });
+    }
+
+    /// <summary>Zmienia rozmiar okna wzdluz osi belki tak, ze krawedz z belka stoi w miejscu.</summary>
+    private void ResizeAlongHeader(bool vertical, bool farEdge, double size)
+    {
+        var bounds = CurrentBoundsDip();
+
+        if (vertical)
+        {
+            SetBoundsAtOnce(farEdge ? bounds.Right - size : bounds.Left, bounds.Top, size, bounds.Height);
+        }
+        else
+        {
+            SetBoundsAtOnce(bounds.Left, farEdge ? bounds.Bottom - size : bounds.Top, bounds.Width, size);
         }
     }
 
@@ -1602,8 +1799,8 @@ public partial class FenceWindow : Window
             var width = Width - e.HorizontalChange;
             if (width >= MinFenceWidth)
             {
-                Left += e.HorizontalChange;
-                Width = width;
+                // Pozycja i rozmiar naraz - inaczej prawa krawedz drga przy ciagnieciu lewej.
+                SetBoundsAtOnce(Left + e.HorizontalChange, Top, width, Height);
             }
         }
         else if (tag.Contains('E'))
@@ -1630,8 +1827,8 @@ public partial class FenceWindow : Window
             var height = Height - e.VerticalChange;
             if (height >= MinFenceHeight)
             {
-                Top += e.VerticalChange;
-                Height = height;
+                // Pozycja i rozmiar naraz - inaczej dolna krawedz drga przy ciagnieciu gornej.
+                SetBoundsAtOnce(Left, Top + e.VerticalChange, Width, height);
             }
         }
         else if (tag.Contains('S'))
@@ -1642,6 +1839,75 @@ public partial class FenceWindow : Window
                 Height = height;
             }
         }
+    }
+
+    /// <summary>
+    /// Ustawia polozenie i rozmiar okna jednym SetWindowPos, a potem wyrownuje do nich
+    /// wlasciwosci WPF. Osobne przypisania Left/Top i Width/Height to dwa ruchy okna -
+    /// miedzy nimi widac stan posredni i przeciwlegla krawedz drga.
+    /// </summary>
+    private void SetBoundsAtOnce(double left, double top, double width, double height)
+    {
+        if (_hwnd != IntPtr.Zero)
+        {
+            var toDevice = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice
+                           ?? Matrix.Identity;
+
+            // Liczymy od krawedzi, a nie od rozmiaru, zeby zaokraglenia nie przesuwaly
+            // krawedzi, ktora ma stac w miejscu.
+            var x = (int)Math.Round(left * toDevice.M11);
+            var y = (int)Math.Round(top * toDevice.M22);
+            var w = Math.Max(1, (int)Math.Round((left + width) * toDevice.M11) - x);
+            var h = Math.Max(1, (int)Math.Round((top + height) * toDevice.M22) - y);
+
+            // Okno, ktore juz tam stoi, zostawiamy w spokoju - kazde SetWindowPos przestawia
+            // je tez w z-order (patrz WndProc), a szuflada wola to przy kazdym wysunieciu.
+            if (!NativeMethods.GetWindowRect(_hwnd, out var current) ||
+                current.Left != x || current.Top != y ||
+                current.Right - current.Left != w || current.Bottom - current.Top != h)
+            {
+                NativeMethods.SetWindowPos(
+                    _hwnd, IntPtr.Zero, x, y, w, h,
+                    NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+            }
+
+            if (SyncPropertiesFromHwnd())
+            {
+                return;
+            }
+        }
+
+        Left = left;
+        Top = top;
+        Width = width;
+        Height = height;
+    }
+
+    /// <summary>
+    /// Przepisuje do Left/Top/Width/Height to, co faktycznie stoi w oknie Win32.
+    /// Wartosci liczone z pikseli urzadzenia zaokraglaja sie z powrotem dokladnie do tych
+    /// samych pikseli, wiec WPF nie przesunie okna o piksel przy ich przypisaniu.
+    /// </summary>
+    private bool SyncPropertiesFromHwnd()
+    {
+        if (_hwnd == IntPtr.Zero || !NativeMethods.GetWindowRect(_hwnd, out var rect))
+        {
+            return false;
+        }
+
+        var fromDevice = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice
+                         ?? Matrix.Identity;
+
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
+        BeginAnimation(WidthProperty, null);
+        BeginAnimation(HeightProperty, null);
+
+        Left = rect.Left * fromDevice.M11;
+        Top = rect.Top * fromDevice.M22;
+        Width = (rect.Right - rect.Left) * fromDevice.M11;
+        Height = (rect.Bottom - rect.Top) * fromDevice.M22;
+        return true;
     }
 
     private void Resize_DragCompleted(object sender, DragCompletedEventArgs e)
@@ -1775,6 +2041,9 @@ public partial class FenceWindow : Window
         // Przyklejonemu fence'owi rozmiar ustawia szuflada - patrz SettleAfterDisplayChange.
         if (Model.Dock == EdgeDock.None)
         {
+            // Zakonczenie przerwanego zwijania zmienialoby jeszcze rozmiar okna po swojemu.
+            ResetRootBorder();
+
             Width = Model.RolledUp && IsHeaderVertical
                 ? CollapsedWidth()
                 : Math.Max(Model.Width, MinFenceWidth);
