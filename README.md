@@ -207,11 +207,13 @@ strone jest wtedy jedna wlasciwoscia zamiast przekladania wierszy, kolumn i rozp
 
 Dwie rzeczy, ktore trzeba bylo przy tym rozwiazac:
 
-- **Kotwica przy zwijaniu.** Okno WPF zmienia rozmiar od lewego gornego rogu, wiec fence
-  z belka na dole albo po prawej uciekalby razem z krawedzia. Dlatego razem z rozmiarem
-  animowane jest tez polozenie (`Left` rownolegle do `Width`, `Top` do `Height`), w tej samej
-  klatce. Wczesniejsza wersja poprawiala polozenie dopiero w `SizeChanged` - spozniala sie
-  o klatke za animacja i fence "szarpal". To samo dotyczy chowania do prawej i dolnej krawedzi.
+- **Kotwica przy zwijaniu.** Belka ma stac w miejscu, a przy belce na dole albo po prawej
+  razem z rozmiarem okna musialoby jechac tez jego polozenie. Przezroczyste okno WPF rysuje
+  jednak osobny watek i po kazdym przesunieciu przez klatke widac w nowym miejscu jeszcze stara
+  zawartosc - belka podskakiwala. Dlatego przez cala animacje okno ma rozmiar pelnego fence'a,
+  a skraca sie tylko `RootBorder` w srodku (`AnimateRootSize`). Samo okno zmienia rozmiar raz:
+  przy rozwijaniu na poczatku, przy zwijaniu na koncu. Przy belce na dole albo po prawej ta
+  jedna zmiana potrafi jeszcze mignac przez klatke.
 - **Obrocona nazwa.** Tytul dostaje `LayoutTransform` o 270 stopni, ale margines i przycinanie
   licza sie dalej w ukladzie rodzica, wiec dlugosc tekstu trzeba ograniczac wysokoscia belki
   (`UpdateVerticalTitleLength`). Bez tego dluga nazwa wyjezdzalaby poza fence.
@@ -499,11 +501,13 @@ bezposrednio nad pulpitem i wstawia sie pod nie (`DesktopService.GetDesktopAncho
 Nic nie jest kasowane ani zapisywane w rejestrze - zamkniecie aplikacji przywraca stan.
 Timer co 1,2 s sprawdza, czy Explorer nie wrocil z restartu i nie przywrocil ikon.
 
-**Chowanie do krawedzi.** Schowany fence *zwija swoj rozmiar*, a nie wyjezdza poza ekran.
-Wypychanie poza krawedz wygladalo dobrze na jednym monitorze, ale przy kilku ekranach fence
-wjezdzal na sasiedni monitor i lapal jego skalowanie DPI. Zwijanie trzyma okno na jednym
-ekranie. Zawartosc dostaje na ten czas sztywny rozmiar, wiec animacja tylko ja przycina,
-zamiast przebudowywac siatke ikon na kazdej klatce.
+**Chowanie do krawedzi.** Okno przyklejonego fence'a stoi przy krawedzi zawsze w pelnym
+rozmiarze, a schowanie skraca tylko `RootBorder` w srodku. Reszta okna jest calkiem
+przezroczysta, wiec klikniecia i przeciaganie przechodza przez nia na pulpit. Animowanie samego
+okna przy dolnej i prawej krawedzi konczylo sie skakaniem (patrz "Kotwica przy zwijaniu"),
+a wypychanie okna poza ekran - wjazdem na sasiedni monitor z jego skalowaniem DPI. Zawartosc
+dostaje na ten czas sztywny rozmiar, wiec animacja tylko ja przycina, zamiast przebudowywac
+siatke ikon na kazdej klatce.
 
 **Ikony.** `SHGetFileInfo` z `SHGFI_SYSICONINDEX` daje indeks w systemowej liscie obrazow,
 a `IImageList.GetIcon` wyciaga z niej wersje 48 px albo 256 px. Wyniki sa zamrazane
